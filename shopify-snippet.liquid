@@ -1,0 +1,93 @@
+{% comment %}
+  AM Luxury Jewelry — Engraving App Snippet
+  Add this to your product template (e.g. sections/product-form.liquid)
+  or as a Custom Liquid block in the Theme Editor.
+
+  Replace YOUR-APP-URL with your Vercel deployment URL.
+{% endcomment %}
+
+{% assign engraving_app_url = 'https://YOUR-APP-URL.vercel.app' %}
+{% assign engraving_shape = product.metafields.engraving.shape | default: 'circle' %}
+
+<div id="am-engraving-widget" style="margin: 16px 0;">
+  <button
+    id="am-personalise-btn"
+    type="button"
+    style="
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 24px;
+      background: #1a1a1a;
+      color: #ffffff;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
+      justify-content: center;
+    "
+    onmouseover="this.style.background='#C6A25A'"
+    onmouseout="this.style.background='#1a1a1a'"
+  >
+    <span style="color: #C6A25A; font-size: 14px;">✦</span>
+    Personalise Your Piece
+  </button>
+
+  <div id="am-design-badge" style="display:none; margin-top:10px; padding:10px 14px; background:#F8F6F1; border:1px solid #E8E4DC; border-left:3px solid #C6A25A; font-family:Montserrat,sans-serif; font-size:12px; color:#1a1a1a;">
+    <strong style="color:#C6A25A;">✓ Engraving Added</strong>
+    <span id="am-design-text" style="display:block; margin-top:2px; color:#666; font-size:11px;"></span>
+  </div>
+</div>
+
+{%- comment -%} Hidden cart line-item properties {%- endcomment -%}
+<input type="hidden" name="properties[Engraving]" id="am-eng-data" value="">
+<input type="hidden" name="properties[_Engraving Preview]" id="am-eng-preview" value="">
+
+<script>
+(function() {
+  var APP_URL = {{ engraving_app_url | json }};
+  var btn = document.getElementById('am-personalise-btn');
+  var badge = document.getElementById('am-design-badge');
+  var badgeText = document.getElementById('am-design-text');
+  var engData = document.getElementById('am-eng-data');
+  var engPreview = document.getElementById('am-eng-preview');
+
+  btn.addEventListener('click', function() {
+    var params = new URLSearchParams({
+      img: {{ product.featured_image | img_url: '800x800' | json }},
+      title: {{ product.title | escape | json }},
+      shape: {{ engraving_shape | json }}
+    });
+
+    var popup = window.open(
+      APP_URL + '?' + params.toString(),
+      'am_engraving',
+      'width=500,height=820,scrollbars=no,resizable=no,toolbar=no,menubar=no,location=no'
+    );
+
+    if (!popup) {
+      // Fallback: open in same tab
+      window.location.href = APP_URL + '?' + params.toString();
+    }
+  });
+
+  window.addEventListener('message', function(event) {
+    if (!event.data || event.data.type !== 'AM_ENGRAVING_CONFIRMED') return;
+    var d = event.data;
+
+    engData.value = d.engravingData || '';
+    engPreview.value = d.imageDataUrl || '';
+
+    // Show badge
+    badge.style.display = 'block';
+    badgeText.textContent = d.text ? '"' + d.text + '"' + (d.font ? ' in ' + d.font : '') : 'Custom design added';
+    btn.textContent = '✦ Edit Engraving';
+    btn.style.background = '#A07830';
+  });
+})();
+</script>

@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --gold: #C6A25A;
+    --gold-dark: #A07830;
+    --brand: #1a1a1a;
+  }
+}
+
+@layer utilities {
+  .text-engraved {
+    color: rgba(30, 20, 10, 0.72);
+    text-shadow: 0 1px 1px rgba(255,255,255,0.15), 0 -1px 1px rgba(0,0,0,0.25);
+    mix-blend-mode: multiply;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+/* Fabric.js canvas touch fix */
+canvas { touch-action: none; }
+
+/* Gold shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.gold-shimmer {
+  background: linear-gradient(90deg, #C6A25A 0%, #E8D49A 40%, #C6A25A 60%, #A07830 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Elegant spinner */
+@keyframes spin-elegant {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  width: 36px; height: 36px;
+  border: 2px solid #E8E4DC;
+  border-top-color: #C6A25A;
+  border-radius: 50%;
+  animation: spin-elegant 0.8s linear infinite;
+}
