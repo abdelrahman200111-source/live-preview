@@ -1,248 +1,243 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import EngravingCanvas from './components/EngravingCanvas'
+import { useCanvasManager } from './hooks/useCanvasManager'
 import TextTab from './components/TextTab'
 import ImageTab from './components/ImageTab'
 import SymbolTab from './components/SymbolTab'
 import PreviewScreen from './components/PreviewScreen'
 
-const TABS = ['Text', 'Image', 'Symbol']
-const CANVAS_SIZE = 340
-
+// ── URL params ────────────────────────────────────────────
 function useUrlParams() {
-  const params = new URLSearchParams(window.location.search)
+  const p = new URLSearchParams(window.location.search)
   return {
-    img: params.get('img') || '',
-    title: params.get('title') || 'Your Piece',
-    shape: params.get('shape') || 'circle',
+    img:   p.get('img')   || '',
+    title: p.get('title') || '',
+    shape: p.get('shape') || 'circle',
   }
 }
 
-function LoadingOverlay() {
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface z-10">
-      <div className="spinner mb-4" />
-      <p className="text-xs tracking-widest text-gray-400 uppercase" style={{ fontFamily: 'Montserrat' }}>
-        Loading your piece…
-      </p>
-    </div>
-  )
+// ── Canvas size: responsive square, max 360 ───────────────
+function useCanvasSize() {
+  const [size, setSize] = useState(() => Math.min(window.innerWidth, 360))
+  useEffect(() => {
+    const update = () => setSize(Math.min(window.innerWidth, 360))
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+  return size
 }
 
-function ErrorState({ message }) {
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface z-10 gap-3 px-8 text-center">
-      <span className="text-4xl text-gold/40">✦</span>
-      <p className="text-sm text-gray-500" style={{ fontFamily: 'Cormorant Garamond', fontStyle: 'italic' }}>
-        {message || 'Unable to load product image'}
-      </p>
-      <p className="text-xs text-gray-400" style={{ fontFamily: 'Montserrat' }}>
-        You can still design your engraving below
-      </p>
-    </div>
-  )
-}
+// ── Tab definitions ───────────────────────────────────────
+const TABS = ['Text', 'Image', 'Symbol']
 
+// ─────────────────────────────────────────────────────────
 export default function App() {
   const { img, title, shape } = useUrlParams()
+  const canvasSize = useCanvasSize()
+  const [screen, setScreen]     = useState('tool') // 'tool' | 'preview'
   const [activeTab, setActiveTab] = useState(0)
-  const [screen, setScreen] = useState('tool') // 'tool' | 'preview'
-  const [canvasReady, setCanvasReady] = useState(false)
-  const [imgLoading, setImgLoading] = useState(!!img)
-  const [imgError, setImgError] = useState(false)
-  const [canvasInst, setCanvasInst] = useState(null)
   const [previewData, setPreviewData] = useState(null)
-  const canvasRef = useRef(null)
+  const [drawerOpen, setDrawerOpen]   = useState(false)
+  const touchStartX = useRef(0)
 
-  // Preload image to detect error
+  const canvas = useCanvasManager({ productImage: img, shape, canvasSize })
+
+  // Animate drawer open after mount
   useEffect(() => {
-    if (!img) { setImgLoading(false); return }
-    const image = new Image()
-    image.crossOrigin = 'anonymous'
-    image.onload = () => setImgLoading(false)
-    image.onerror = () => { setImgLoading(false); setImgError(true) }
-    image.src = img
-  }, [img])
-
-  const handleCanvasReady = useCallback((fc) => {
-    setCanvasInst(fc)
-    setCanvasReady(true)
+    const t = setTimeout(() => setDrawerOpen(true), 60)
+    return () => clearTimeout(t)
   }, [])
 
-  const handleConfirm = () => {
-    if (!canvasRef.current) return
-    const imageDataUrl = canvasRef.current.exportImage()
+  // ── Tab swipe handlers ────────────────────────────────
+  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX }
+  const onTouchEnd   = (e) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(dx) < 40) return
+    if (dx < 0 && activeTab < TABS.length - 1) setActiveTab(t => t + 1)
+    if (dx > 0 && activeTab > 0)               setActiveTab(t => t - 1)
+  }
 
-    // Gather text info from canvas objects
-    const fc = canvasRef.current.getCanvas()
-    let engravingText = '', engravingFont = '', engravingSize = 0
-    if (fc) {
-      fc.getObjects().forEach(obj => {
-        if (obj.text && !obj._isBackground) {
-          engravingText = obj.text
-          engravingFont = obj.fontFamily || ''
-          engravingSize = obj.fontSize || 0
-        }
-      })
-    }
+  // ── Confirm design ────────────────────────────────────
+  const handleConfirm = useCallback(() => {
+    const imageDataUrl  = canvas.exportImage()
+    const engravingInfo = canvas.getEngravingInfo()
+    const parts = [
+      engravingInfo.text && `Text: ${engravingInfo.text}`,
+      engravingInfo.font && `Font: ${engravingInfo.font}`,
+      engravingInfo.size && `Size: ${engravingInfo.size}px`,
+    ].filter(Boolean)
 
-    const data = {
-      type: 'AM_ENGRAVING_CONFIRMED',
-      text: engravingText,
-      font: engravingFont,
-      size: engravingSize,
+    setPreviewData({
       imageDataUrl,
-      engravingData: [
-        engravingText && `Text: ${engravingText}`,
-        engravingFont && `Font: ${engravingFont}`,
-        engravingSize && `Size: ${engravingSize}px`,
-      ].filter(Boolean).join(' | '),
-    }
-
-    setPreviewData({ ...data, imageDataUrl })
+      engravingInfo,
+      engravingData: parts.length ? parts.join(' | ') : 'Custom design (image/symbol)',
+    })
     setScreen('preview')
-  }
+  }, [canvas])
 
-  const handleAddToCart = () => {
+  // ── Add to cart → postMessage ─────────────────────────
+  const handleAddToCart = useCallback(() => {
     if (!previewData) return
-    try {
-      window.parent.postMessage(previewData, '*')
-      if (window.opener) window.opener.postMessage(previewData, '*')
-    } catch (e) {}
-    // Graceful close
-    try { window.close() } catch (e) {}
-  }
-
-  const handleStartOver = () => {
-    canvasRef.current?.clearUserObjects()
-  }
+    const msg = {
+      type: 'AM_ENGRAVING_CONFIRMED',
+      ...previewData.engravingInfo,
+      imageDataUrl: previewData.imageDataUrl,
+      engravingData: previewData.engravingData,
+    }
+    try { window.parent.postMessage(msg, '*') } catch (_) {}
+    try { if (window.opener) window.opener.postMessage(msg, '*') } catch (_) {}
+    try { window.close() } catch (_) {}
+  }, [previewData])
 
   const handleClose = () => {
-    try { window.close() } catch (e) {}
-    try { window.parent.postMessage({ type: 'AM_ENGRAVING_CLOSED' }, '*') } catch (e) {}
+    try { window.parent.postMessage({ type: 'AM_ENGRAVING_CLOSED' }, '*') } catch (_) {}
+    try { window.close() } catch (_) {}
   }
 
+  // ── Preview screen ────────────────────────────────────
   if (screen === 'preview') {
     return (
-      <div className="min-h-screen max-w-[480px] mx-auto">
-        <PreviewScreen
-          previewImage={previewData?.imageDataUrl}
-          engravingData={previewData}
-          onAddToCart={handleAddToCart}
-          onEdit={() => setScreen('tool')}
-        />
+      <div className="fixed inset-0 bg-bg flex items-end sm:items-center justify-center">
+        <div className="w-full max-w-[480px] h-full sm:h-auto sm:max-h-[92vh] sm:rounded-t-2xl overflow-hidden flex flex-col bg-bg shadow-2xl">
+          <PreviewScreen
+            previewImage={previewData?.imageDataUrl}
+            engravingInfo={previewData?.engravingInfo}
+            productTitle={title}
+            onAddToCart={handleAddToCart}
+            onEdit={() => setScreen('tool')}
+          />
+        </div>
       </div>
     )
   }
 
+  // ── Tool screen ───────────────────────────────────────
   return (
-    <div
-      className="flex flex-col min-h-screen max-w-[480px] mx-auto bg-bg"
-      style={{ fontFamily: 'Montserrat' }}
-    >
-      {/* Header */}
-      <header className="flex items-center justify-between px-5 pt-6 pb-3">
-        <div>
-          <p className="text-xs tracking-[0.25em] text-gold uppercase" style={{ fontWeight: 300 }}>
-            AM Luxury Jewelry
-          </p>
-          <h1
-            className="text-xl text-brand leading-tight mt-0.5"
-            style={{ fontFamily: 'Playfair Display', fontWeight: 400 }}
-          >
-            Personalise Your Piece
-          </h1>
-          {title && title !== 'Your Piece' && (
-            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[240px]">{title}</p>
-          )}
+    <div className="fixed inset-0 flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-[2px]">
+      {/* Drawer / modal */}
+      <div
+        className={`
+          w-full max-w-[480px] bg-white flex flex-col
+          rounded-t-2xl sm:rounded-2xl
+          shadow-2xl overflow-hidden
+          transition-transform duration-[380ms] ease-[cubic-bezier(0.32,0.72,0,1)]
+          ${drawerOpen ? 'translate-y-0' : 'translate-y-full sm:translate-y-8 sm:opacity-0'}
+        `}
+        style={{ maxHeight: '96vh' }}
+      >
+        {/* ── Drag handle (mobile only) ── */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-10 h-1 rounded-full bg-gray-200" />
         </div>
-        <button
-          onClick={handleClose}
-          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand rounded-full hover:bg-surface transition-colors text-lg"
-          aria-label="Close"
-        >
-          ×
-        </button>
-      </header>
 
-      {/* Canvas Area */}
-      <div className="flex items-center justify-center px-4 py-3 bg-surface border-y border-border">
-        <div className="relative" style={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}>
-          {imgLoading && <LoadingOverlay />}
-          {imgError && !imgLoading && <ErrorState />}
-          <EngravingCanvas
-            ref={canvasRef}
-            productImage={imgError ? '' : img}
-            shape={shape}
-            canvasSize={CANVAS_SIZE}
-            onReady={handleCanvasReady}
-          />
-        </div>
-      </div>
-
-      {/* Drag hint */}
-      <p className="text-center text-xs text-gray-400 py-2 tracking-wide" style={{ fontFamily: 'Cormorant Garamond', fontStyle: 'italic' }}>
-        ↕ Tap to select · drag to reposition
-      </p>
-
-      {/* Tabs */}
-      <div className="flex border-b border-border bg-white">
-        {TABS.map((tab, i) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(i)}
-            className={`
-              flex-1 py-3 text-xs tracking-widest uppercase transition-all relative
-              ${activeTab === i ? 'text-brand' : 'text-gray-400 hover:text-gray-600'}
-            `}
-          >
-            {tab}
-            {activeTab === i && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gold rounded-full" />
+        {/* ── Header ── */}
+        <header className="flex items-start justify-between px-5 pt-2 pb-3 border-b border-border shrink-0">
+          <div>
+            <p className="text-[10px] tracking-[0.28em] text-gold uppercase" style={{ fontWeight: 300 }}>
+              AM Luxury Jewelry
+            </p>
+            <h1 className="text-lg text-brand mt-0.5 leading-tight" style={{ fontFamily: 'Playfair Display', fontWeight: 400 }}>
+              Personalise Your Piece
+            </h1>
+            {title && (
+              <p className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[220px]">{title}</p>
             )}
+          </div>
+          <button
+            onClick={handleClose}
+            className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-brand hover:bg-surface rounded-full transition-colors text-xl leading-none ml-2 mt-0.5 shrink-0"
+            aria-label="Close"
+          >
+            ×
           </button>
-        ))}
-      </div>
+        </header>
 
-      {/* Tab Content */}
-      <div className="flex-1 overflow-y-auto scrollbar-hide bg-bg px-4 py-5">
-        {activeTab === 0 && (
-          <TextTab
-            canvas={canvasInst}
-            shape={shape}
-            canvasSize={CANVAS_SIZE}
-          />
-        )}
-        {activeTab === 1 && (
-          <ImageTab
-            canvas={canvasInst}
-            shape={shape}
-            canvasSize={CANVAS_SIZE}
-          />
-        )}
-        {activeTab === 2 && (
-          <SymbolTab
-            canvas={canvasInst}
-            shape={shape}
-            canvasSize={CANVAS_SIZE}
-          />
-        )}
-      </div>
+        {/* ── Canvas ── */}
+        <div className="bg-surface border-b border-border shrink-0 flex items-center justify-center relative"
+          style={{ height: canvasSize }}>
+          {canvas.imgLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface z-10 gap-3">
+              <div className="spinner" />
+              <p className="text-[10px] tracking-widest text-gray-400 uppercase">Loading…</p>
+            </div>
+          )}
+          {/* The actual Fabric.js canvas element */}
+          <canvas ref={canvas.canvasElRef} />
+        </div>
 
-      {/* Footer Actions */}
-      <div className="px-5 pb-8 pt-3 space-y-2.5 border-t border-border bg-white">
-        <button
-          onClick={handleConfirm}
-          disabled={!canvasReady}
-          className="w-full py-4 bg-brand text-white text-xs tracking-widest uppercase transition-all hover:bg-gold-dark active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+        {/* ── Tab bar ── */}
+        <div className="flex border-b border-border shrink-0 bg-white">
+          {TABS.map((tab, i) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(i)}
+              className={`
+                flex-1 py-3 text-[10px] tracking-[0.22em] uppercase relative transition-colors
+                ${activeTab === i ? 'text-brand' : 'text-gray-400 hover:text-gray-600'}
+              `}
+            >
+              {tab}
+              {activeTab === i && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-[2px] rounded-full bg-gold" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Tab content (swipeable) ── */}
+        <div
+          className="overflow-hidden shrink-0"
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
         >
-          Confirm Design
-        </button>
-        <button
-          onClick={handleStartOver}
-          className="w-full py-3 border border-border text-xs tracking-widest uppercase text-gray-400 hover:border-gold hover:text-gold transition-all"
-        >
-          Start Over
-        </button>
+          <div
+            className="tab-track"
+            style={{ transform: `translateX(${-activeTab * 100}%)` }}
+          >
+            {/* Text tab */}
+            <div className="tab-panel px-5 py-5 overflow-y-auto scrollbar-hide" style={{ maxHeight: '38vh' }}>
+              <TextTab
+                setText={canvas.setText}
+                clearText={canvas.clearText}
+              />
+            </div>
+
+            {/* Image tab */}
+            <div className="tab-panel px-5 py-5 overflow-y-auto scrollbar-hide" style={{ maxHeight: '38vh' }}>
+              <ImageTab
+                setImage={canvas.setImage}
+                clearImage={canvas.clearImage}
+              />
+            </div>
+
+            {/* Symbol tab */}
+            <div className="tab-panel px-5 py-5 overflow-y-auto scrollbar-hide" style={{ maxHeight: '38vh' }}>
+              <SymbolTab
+                setSymbol={canvas.setSymbol}
+                updateSymbolSize={canvas.updateSymbolSize}
+                clearSymbol={canvas.clearSymbol}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* ── CTAs ── */}
+        <div className="px-5 pt-3 pb-7 space-y-2.5 border-t border-border bg-white shrink-0">
+          <button
+            onClick={handleConfirm}
+            disabled={!canvas.ready}
+            className="w-full py-4 bg-brand text-white text-[11px] tracking-[0.22em] uppercase transition-all hover:bg-gold-dark active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed btn-press"
+            style={{ fontFamily: 'Montserrat' }}
+          >
+            Confirm Design
+          </button>
+          <button
+            onClick={canvas.clearAll}
+            className="w-full py-3 border border-border text-[11px] tracking-[0.22em] uppercase text-gray-400 hover:border-gold hover:text-gold transition-all btn-press"
+            style={{ fontFamily: 'Montserrat' }}
+          >
+            Start Over
+          </button>
+        </div>
       </div>
     </div>
   )

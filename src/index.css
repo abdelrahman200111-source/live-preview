@@ -2,49 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --gold: #C6A25A;
-    --gold-dark: #A07830;
-    --brand: #1a1a1a;
-  }
+/* ─── Drawer animation ─────────────────────────────────── */
+.drawer-enter {
+  transform: translateY(100%);
+}
+.drawer-enter-active {
+  transform: translateY(0);
+  transition: transform 0.38s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.drawer-open {
+  transform: translateY(0);
+  transition: transform 0.38s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-@layer utilities {
-  .text-engraved {
-    color: rgba(30, 20, 10, 0.72);
-    text-shadow: 0 1px 1px rgba(255,255,255,0.15), 0 -1px 1px rgba(0,0,0,0.25);
-    mix-blend-mode: multiply;
-  }
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+/* ─── Tab swipe ────────────────────────────────────────── */
+.tab-track {
+  display: flex;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+.tab-panel {
+  min-width: 100%;
+  flex-shrink: 0;
 }
 
-/* Fabric.js canvas touch fix */
+/* ─── Canvas touch ─────────────────────────────────────── */
 canvas { touch-action: none; }
 
-/* Gold shimmer animation */
+/* ─── Scrollbar hide ───────────────────────────────────── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ─── Gold shimmer on brand text ───────────────────────── */
 @keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
 }
 .gold-shimmer {
-  background: linear-gradient(90deg, #C6A25A 0%, #E8D49A 40%, #C6A25A 60%, #A07830 100%);
+  background: linear-gradient(90deg, #C6A25A 0%, #EDD98A 40%, #C6A25A 70%, #A07830 100%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: shimmer 3s linear infinite;
+  animation: shimmer 4s linear infinite;
 }
 
-/* Elegant spinner */
-@keyframes spin-elegant {
+/* ─── Elegant spinner ──────────────────────────────────── */
+@keyframes spin-el {
   to { transform: rotate(360deg); }
 }
 .spinner {
-  width: 36px; height: 36px;
+  width: 32px; height: 32px;
   border: 2px solid #E8E4DC;
   border-top-color: #C6A25A;
   border-radius: 50%;
-  animation: spin-elegant 0.8s linear infinite;
+  animation: spin-el 0.75s linear infinite;
 }
+
+/* ─── Range slider gold thumb ──────────────────────────── */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: #E8E4DC;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #C6A25A;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: #C6A25A;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  cursor: pointer;
+}
+
+/* ─── Font picker card selected state ──────────────────── */
+.font-card-selected {
+  border-color: #C6A25A !important;
+  background: rgba(198,162,90,0.08) !important;
+}
+
+/* ─── Button press micro-anim ──────────────────────────── */
+.btn-press:active { transform: scale(0.97); }
